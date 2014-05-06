@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import os
 import sys
@@ -29,6 +29,10 @@ def kill_webdrivers(): # selenium doesn't clean up phantomjs instances
 atexit.register(kill_webdrivers)
 
 
+def filename_from_url(url):
+    return url.replace("/", "_")
+
+
 def worker(queue, timeout, outdir):
     driver = webdriver.PhantomJS(service_log_path=os.devnull)
     driver.set_page_load_timeout(timeout)
@@ -37,7 +41,7 @@ def worker(queue, timeout, outdir):
         url = queue.get()
         try:
             driver.get(url)
-            filename = os.path.join(outdir, url.encode("hex") + ".png")
+            filename = os.path.join(outdir, filename_from_url(url) + ".png")
             driver.save_screenshot(filename)
         except TimeoutException:
             msg = colored("timeout ", "red", attrs=["bold"]) + url

@@ -22,7 +22,7 @@ except ImportError:
 _WEBDRIVERS = []
 
 
-def kill_webdrivers(): # selenium doesn't clean up phantomjs instances
+def kill_webdrivers(): # selenium doesn't clean up driver instances
     for driver in _WEBDRIVERS:
         driver.quit()
 
@@ -33,8 +33,22 @@ def filename_from_url(url):
     return url.replace("/", "_")
 
 
-def worker(queue, timeout, outdir):
-    driver = webdriver.PhantomJS(service_log_path=os.devnull)
+def create_driver_instance(driver_type):
+    try:
+        return {
+            "phantomjs": webdriver.PhantomJS,
+            "firefox"  : webdriver.Firefox,
+            "chrome"   : webdriver.Chrome,
+            "ie"       : webdriver.Ie,
+            "safari"   : webdriver.Safari,
+            "opera"    : webdriver.Opera,
+        }[driver_type]()
+    except KeyError:
+        raise ValueError("Invalid driver type")
+
+
+def worker(queue, driver_type, timeout, outdir):
+    driver = create_driver_instance(driver_type)
     driver.set_page_load_timeout(timeout)
     _WEBDRIVERS.append(driver)
     while True:
@@ -76,7 +90,7 @@ def wait_till_queue_finished(queue, finished):
     finished.set()
 
 
-def main(urlfile, outdir, jobs, timeout):
+def main(urlfile, outdir, driver, jobs, timeout):
     def wait_for_event(ev):
         while not ev.is_set():
             sleep(1)
@@ -84,7 +98,7 @@ def main(urlfile, outdir, jobs, timeout):
         os.mkdir(outdir)
     queue = Queue(jobs)
     for _ in xrange(jobs):
-        create_thread(worker, (queue, timeout, outdir))
+        create_thread(worker, (queue, driver, timeout, outdir))
     fileobj = sys.stdin if urlfile == "-" else open(urlfile)
     finished = threading.Event()
     # run blocking operations in threads, allowing keyboard interrupts etc.
@@ -106,12 +120,15 @@ parser.add_argument("-t", "--timeout", type=int, default=6,
                     help="page load timeout", dest="timeout")
 parser.add_argument("--no-color", action="store_true", help="no colored output",
                     dest="no_color")
+parser.add_argument("-d", "--driver", choices=\
+                    ("phantomjs", "firefox", "chrome", "ie", "safari", "opera"),
+                    default="phantomjs", dest="driver")
 
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.no_color:
         colored = _colored
     try:
-        main(args.urlfile, args.outdir, args.jobs, args.timeout)
+        main(args.urlfile, args.outdir, args.driver, args.jobs, args.timeout)
     except KeyboardInterrupt:
         pass
